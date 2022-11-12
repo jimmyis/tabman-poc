@@ -20,12 +20,14 @@
             background: #fafafa;
         }
     </style>
-  <script type="text/javascript" src="exptabs.js"></script>
+  <script type="text/javascript" src="sha256.min.js"></script>
+  <script type="text/javascript" src="tabman.js"></script>
   </head>
   <body>
     <form>
         Include: <label><input id="inclTitle" type="checkbox" value="1" checked="checked" /> Title</label> <label><input id="inclAll" type="checkbox" value="1" /> All Windows</label><br />
         <textarea id="content"></textarea>
+        <textarea id="json"></textarea>
         <input type="button" id="sendMail1" value="Call Gmail" />
         <input type="button" id="sendMail0" value="Call 'Mailto:'" />
         <input type="button" id="btOpenTabs" value="Open all of the above URLs in new tabs" />

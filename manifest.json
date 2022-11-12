@@ -1,6 +1,6 @@
 {
-    "name": "Export Tabs",
-    "version": "1.2",
+    "name": "Tab Man",
+    "version": "0.1",
     "description": "Export the URL of all opened tabs to text",
     "icons": {
         "16": "tabs_io.png",
@@ -9,7 +9,7 @@
     },
     "browser_action": {
         "default_icon": "tabs_io.png",
-        "default_title": "Export Tabs",
+        "default_title": "Tab Man",
         "default_popup": "popup.html"
     },
     "permissions": ["tabs"],
