@@ -24,13 +24,24 @@
   <script type="text/javascript" src="tabman.js"></script>
   </head>
   <body>
+    <div>Current Window ID:
+      <div id="window-id"></div>
+    </div>
     <form>
-        Include: <label><input id="inclTitle" type="checkbox" value="1" checked="checked" /> Title</label> <label><input id="inclAll" type="checkbox" value="1" /> All Windows</label><br />
+        Include: 
+        <label><input id="inclTitle" type="checkbox" value="1" checked="checked" /> Title</label>
+        <label><input id="inclAll" type="checkbox" value="1" /> All Windows</label>
+        <label><input id="checkWithText" type="checkbox" value="1" checked="checked" /> Text</label>
+        <label><input id="checkWithJson" type="checkbox" value="0" /> JSON</label>
+        <br />
         <textarea id="content"></textarea>
         <textarea id="json"></textarea>
         <input type="button" id="sendMail1" value="Call Gmail" />
         <input type="button" id="sendMail0" value="Call 'Mailto:'" />
         <input type="button" id="btOpenTabs" value="Open all of the above URLs in new tabs" />
+        <input type="button" id="btGetAllWindows" value="Get All Windows" />
+        <input type="button" id="btUnknown" value="???" />
+        <input type="button" id="btGoToTabGroup" value="Go to tab group" />
 		<input type="button" id="download" value="Download as html" />
     </form>
   </body>

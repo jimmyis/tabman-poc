@@ -1,3 +1,9 @@
+var tabDB = {
+  check: 892504571
+}
+
+var activeTabs = [];
+
 var targetWindow = null;
 var tabCount = 0;
 var excludeUrls = new Set([
@@ -15,6 +21,10 @@ var excludeUrls = new Set([
   "newtab"
 ])
 
+const excludePaths = {
+  "/": ["youtube.com", "www.youtube.com"],
+}
+
 var noParenthesis = new Set([
   "facebook.com",
   "www.facebook.com",
@@ -25,17 +35,216 @@ var noParenthesis = new Set([
 ])
 
 function start(tab) {
-  chrome.windows.getCurrent(getWindows);
+  console.log("TabMan Started");
+  const isAllWindow = document.getElementById('inclAll').checked;
+  const isWithText = document.getElementById('checkWithText').checked;
+  const isWithJson = document.getElementById('checkWithJson').checked;
+  const exportOptions = {
+    text: isWithText,
+    json: isWithJson
+  }
+
+  if (isAllWindow) {
+    document.getElementById('content').value = '';
+
+    chrome.windows.getAll({
+      populate: true
+    }, function (windows) {
+      console.log("Total Windows", windows.length);
+
+      const isMetaJsonOnly = !isWithText && isWithJson;
+      const metaJson = {
+        from: "",
+        profile: "",
+        device: "",
+        timestamp: new Date().getTime(),
+        windows: {},
+      }
+
+      let order = 0;
+
+      // const tabsInWindows = windows.map(({ id, tabs }) => ({ id, tabs }));
+      for (let window of windows) {
+        let text = "";
+        const json = {};
+
+        metaJson.windows[window.id] = {
+          order,
+          id: window.id,
+          tabs: {}
+        }
+
+        order += 1;
+
+        for (const tab of window.tabs) {
+          const { 
+            origin,
+            href,
+            protocol,
+            host,
+            port,
+            hostname,
+            pathname,
+            hash,
+            search,
+            searchParams
+          } = new URL(tab.url);
+     
+          if (checkTabValid({
+            ...tab,
+            origin,
+            href,
+            protocol,
+            host,
+            port,
+            hostname,
+            pathname,
+            hash,
+            search,
+            searchParams
+          })) {
+            if (isWithText) {
+              text += `${tab.title}\n${tab.url}\n\n`
+            }
+            
+            if (isWithJson) {
+              const hash = sha256.create().update(tab.url).hex();
+              const title = generateCleanTitle(tab.title, hostname); 
+              
+              json[hash] = {
+                title,
+                url: tab.url,
+                windowId: window.id,
+                hostname,
+                pathname,
+              }
+            }
+          }
+
+        }
+        
+        metaJson.windows[window.id].tabs = json;
+
+        if (text !== "" || JSON.stringify(json) !== "{}") {
+          document.getElementById('content').value += `### ${order + 1} -- \n`;
+
+          if (isWithText) {
+            document.getElementById('content').value += `\`\`\`\n${ text }\n\`\`\`\n`;
+          }
+          
+          if (isWithJson) {
+            document.getElementById('content').value += `\`\`\`\n${ JSON.stringify(json, null, 2)}\n\`\`\`\n`;
+          }
+  
+          // Add Ending Line for each window
+          document.getElementById('content').value += `\n---\n\n`
+        }
+
+      }
+
+      if (isMetaJsonOnly) {
+        document.getElementById('content').value = `\`\`\`\n${ JSON.stringify(metaJson, null, 2)}\n\`\`\`\n`;
+      }
+
+    });
+
+  } else {
+    chrome.tabGroups.query({
+      // windowId: chrome.windows.WINDOW_ID_CURRENT
+    }, function(tabGroups) {
+      console.log("Total TabGroups", tabGroups.length)
+    })
+    
+    chrome.windows.getCurrent({
+      populate: true
+    }, function (currentWindow) {
+      console.log("Current Window ID", currentWindow.id);
+  
+      tabCount = currentWindow.tabs.length;
+      
+      console.log("Total Tabs in Current Window", tabCount);
+
+      document.getElementById('content').value = createTabListFromWindow(currentWindow, isWithJson);
+    });
+  }
+
+  // chrome.windows.getCurrent(getWindows);
+}
+
+function checkTabValid(tab) {
+  const { protocol } = tab;
+
+  if (
+    protocol !== "chrome:"
+    && protocol !== "file:"
+    && !checkUrlExclusion(tab)
+  ) {
+    return true
+  }
+  return false
+}
+
+function checkUrlExclusion(tab) {
+  const { hostname, pathname, /* search, searchParams */ } = tab
+  // if (searchParams.size > 0) {
+
+  // }
+
+  const isExcludeHost = excludeUrls.has(hostname);
+  const isExcludePath = excludePaths[pathname] ? excludePaths[pathname].indexOf[hostname] >= 0 : false;
+
+  if (isExcludeHost && isExcludePath) {
+    return true
+  }
+  return false
+}
+
+function createTabListFromWindow(window) {
+  if (!window.tabs) {
+    console.error("Invalid window object");
+    return
+  }
+
+  const tabList = window.tabs.map((tab) => ({ id: tab.id, title: tab.title, url: tab.url }));
+  return generateTabListContent(tabList);
+}
+
+function createJsonFromWindow(window) {
+  if (!window.tabs) {
+    console.error("Invalid window object");
+    return
+  }
+
+  const json = {}
+  
+  
+
+
+  // const [tabList, excludedTabList] = createJson(window.tabs);
+  // return generateTabListContent(tabList);
+}
+
+function generateCleanTitle(title, hostname) {
+  return noParenthesis.has(hostname) ? title.replace(/\s*\(.*?\)\s*/g, '') : title;
 }
 
 function getWindows(win) {
-  targetWindow = win;
-  chrome.tabs.getAllInWindow(targetWindow.id, getTabs);
+  // targetWindow = win;
+  // chrome.tabs.getAllInWindow(targetWindow.id, getTabs);
 }
 
 function getTabs(tabs) {
-  tabCount = tabs.length;
-  chrome.windows.getAll({ "populate": true }, expTabs);
+  // chrome.windows.getAll({ "populate": true }, expTabs);
+}
+
+// This is how tab list will be shown on the UI, Default to text.
+function generateTabListContent(tabList, mode = "text") {
+  return mode == "interactive" ? "Interactive Mode is not available"
+    : tabList.map(generateTabItemContent).join("\n\n");
+}
+
+function generateTabItemContent(tabListItem) {
+  return `${tabListItem.title}\n${tabListItem.url}`
 }
 
 function expTabs(windows) {
@@ -50,6 +259,7 @@ function expTabs(windows) {
   };
 
   document.getElementById('content').value = '';
+
   for (var i = 0; i < numWindows; i++) {
     var win = windows[i];
     json.windows[win.id] = {};
@@ -129,7 +339,6 @@ function sendMail(gm) {
 
 function download() {
 
-
   var content = document.getElementById('content').value
   var content_arr = content.split('\n\n');
   var data = '<html><head></head><body>';
@@ -153,12 +362,59 @@ function download() {
 
 }
 
+function btUnknown() {
+  console.log(chrome.tabGroups)
+}
+
+function btGetAllWindows() {
+  chrome.windows.getAll({}, function (windows) {
+    console.log(windows)
+  })
+}
+
+function getCurrentWindowId() {
+
+  console.log(id);
+  // setWindowIdToDisplay()
+}
+
+function setWindowIdToDisplay(id) {
+  document.getElementById('window-id').value = id;
+}
+
+function goToTabGroup(tabId, quietOpen = true) {
+  console.log("Check #1", tabDB.check);
+  if (!tabId) {
+    return
+  }
+
+  const updateProperties = { 'active': true };
+  chrome.tabs.update(tabId, updateProperties, (tab) => {
+    console.log("Check #2", tabDB.check);
+    console.log("Update Tab", tab);
+    if (tab) {
+      tabDB.check = tab.id;
+    }
+    if (tab && quietOpen) {
+      chrome.tabs.discard(tabDB.check, (tab) => {
+        console.log("Update Tab 2", tab);
+        tabDB.check = tab.id;
+      })
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   document.querySelector('#btOpenTabs').addEventListener('click', openTabs);
   document.querySelector('#inclTitle').addEventListener('click', start);
   document.querySelector('#inclAll').addEventListener('click', start);
+  document.querySelector('#checkWithText').addEventListener('click', start);
+  document.querySelector('#checkWithJson').addEventListener('click', start);
   document.querySelector('#sendMail0').addEventListener('click', function () { sendMail(0) });
   document.querySelector('#sendMail1').addEventListener('click', function () { sendMail(1) });
   document.querySelector('#download').addEventListener('click', download);
+  document.querySelector('#btUnknown').addEventListener('click', btUnknown);
+  document.querySelector('#btGetAllWindows').addEventListener('click', btGetAllWindows);
+  document.querySelector('#btGoToTabGroup').addEventListener('click', function () { goToTabGroup(tabDB.check) });
   start();
 });
