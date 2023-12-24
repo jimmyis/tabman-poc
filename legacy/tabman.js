@@ -34,40 +34,145 @@ var noParenthesis = new Set([
   "www.quora.com"
 ])
 
+const createHash = (string) => sha256.create().update(string).hex();
+
+const generateCleanTitle = (title, hostname) => noParenthesis.has(hostname) ? title.replace(/\s*\(.*?\)\s*/g, '') : title;
+
+const makeTextItem = (title, url) => `${title}\n${url}\n\n`
+
+const makeJsonItem = ({ title, url, windowId, hostname, pathname }) => {
+  const hash = createHash(url)
+  const json = { title, url, windowId, hostname, pathname }
+
+  return [hash, json]
+}
+
+function parseTab(tab, { isWithText, isWithJson }) {
+  const { 
+    origin,
+    href,
+    protocol,
+    host,
+    port,
+    hostname,
+    pathname,
+    hash,
+    search,
+    searchParams
+  } = new URL(tab.url);
+
+  const result = { text: null, json: null }
+
+  if (checkTabValid({
+    ...tab,
+    origin,
+    href,
+    protocol,
+    host,
+    port,
+    hostname,
+    pathname,
+    hash,
+    search,
+    searchParams
+  })) {
+
+    const title = generateCleanTitle(tab.title, hostname); 
+
+    if (isWithText) {
+      result["text"] = makeTextItem(title, tab.url)
+    }
+    
+    if (isWithJson) {
+      result["json"] = makeJsonItem({
+        title, url: tab.url, windowId: window.id, hostname, pathname
+      })
+    }
+
+  }
+
+  return result
+}
+
+function updateDom(order, text, json, { isWithText, isWithJson }) {
+  console.log("updateDom", order, text, json, isWithText, isWithJson)
+
+  if (text !== "" || JSON.stringify(json) !== "{}") {
+    document.getElementById('content').value += `### ${order + 1} -- \n`;
+
+    if (isWithText) {
+      document.getElementById('content').value += `\`\`\`\n${ text }\n\`\`\`\n`;
+    }
+    
+    if (isWithJson) {
+      document.getElementById('content').value += `\`\`\`\n${ JSON.stringify(json, null, 2)}\n\`\`\`\n`;
+    }
+
+    // Add Ending Line for each window
+    document.getElementById('content').value += `\n---\n\n`
+  }
+}
+
+function processTabsInWindows (tabs, exportOptions) {
+  let text = ""
+  const json = {};
+
+  for (const tab of tabs) {
+
+    const { text: text_, json: json_ } = parseTab(tab, exportOptions)
+    if (text_) {
+      text += text_
+    }
+
+    if (json_) {
+      const [_hash_, _json_] = json_
+      json[_hash_] = _json_
+    }
+  }
+
+  return [text, json]
+}
+
 function start(tab) {
   console.log("TabMan Started");
   const isAllWindow = document.getElementById('inclAll').checked;
   const isWithText = document.getElementById('checkWithText').checked;
   const isWithJson = document.getElementById('checkWithJson').checked;
-  const exportOptions = {
-    text: isWithText,
-    json: isWithJson
+  
+  const exportOptions = { isWithText, isWithJson }
+
+  console.log(
+    `Export as ${isWithText && isWithJson ? "Text & Json" 
+      : isWithText ? "Text"
+      : isWithJson ? "Json"
+      : ''}`
+  )
+  const isMetaJsonOnly = !isWithText && isWithJson;
+    const metaJson = {
+      from: "",
+      profile: "",
+      device: "",
+      timestamp: new Date().getTime(),
+      windows: {},
   }
+  let order = 0;
+  document.getElementById('content').value = '';
+
+  chrome.tabGroups.query({
+    // windowId: chrome.windows.WINDOW_ID_CURRENT
+  }, function(tabGroups) {
+    console.log("Total TabGroups", tabGroups.length)
+  })
 
   if (isAllWindow) {
-    document.getElementById('content').value = '';
 
     chrome.windows.getAll({
       populate: true
     }, function (windows) {
       console.log("Total Windows", windows.length);
-
-      const isMetaJsonOnly = !isWithText && isWithJson;
-      const metaJson = {
-        from: "",
-        profile: "",
-        device: "",
-        timestamp: new Date().getTime(),
-        windows: {},
-      }
-
-      let order = 0;
-
+  
       // const tabsInWindows = windows.map(({ id, tabs }) => ({ id, tabs }));
       for (let window of windows) {
-        let text = "";
-        const json = {};
-
         metaJson.windows[window.id] = {
           order,
           id: window.id,
@@ -76,69 +181,11 @@ function start(tab) {
 
         order += 1;
 
-        for (const tab of window.tabs) {
-          const { 
-            origin,
-            href,
-            protocol,
-            host,
-            port,
-            hostname,
-            pathname,
-            hash,
-            search,
-            searchParams
-          } = new URL(tab.url);
-     
-          if (checkTabValid({
-            ...tab,
-            origin,
-            href,
-            protocol,
-            host,
-            port,
-            hostname,
-            pathname,
-            hash,
-            search,
-            searchParams
-          })) {
-            if (isWithText) {
-              text += `${tab.title}\n${tab.url}\n\n`
-            }
-            
-            if (isWithJson) {
-              const hash = sha256.create().update(tab.url).hex();
-              const title = generateCleanTitle(tab.title, hostname); 
-              
-              json[hash] = {
-                title,
-                url: tab.url,
-                windowId: window.id,
-                hostname,
-                pathname,
-              }
-            }
-          }
-
-        }
+        const [text, json] = processTabsInWindows(window.tabs, exportOptions)
         
         metaJson.windows[window.id].tabs = json;
 
-        if (text !== "" || JSON.stringify(json) !== "{}") {
-          document.getElementById('content').value += `### ${order + 1} -- \n`;
-
-          if (isWithText) {
-            document.getElementById('content').value += `\`\`\`\n${ text }\n\`\`\`\n`;
-          }
-          
-          if (isWithJson) {
-            document.getElementById('content').value += `\`\`\`\n${ JSON.stringify(json, null, 2)}\n\`\`\`\n`;
-          }
-  
-          // Add Ending Line for each window
-          document.getElementById('content').value += `\n---\n\n`
-        }
+        updateDom(order, text, json, exportOptions)
 
       }
 
@@ -149,12 +196,6 @@ function start(tab) {
     });
 
   } else {
-    chrome.tabGroups.query({
-      // windowId: chrome.windows.WINDOW_ID_CURRENT
-    }, function(tabGroups) {
-      console.log("Total TabGroups", tabGroups.length)
-    })
-    
     chrome.windows.getCurrent({
       populate: true
     }, function (currentWindow) {
@@ -164,7 +205,11 @@ function start(tab) {
       
       console.log("Total Tabs in Current Window", tabCount);
 
-      document.getElementById('content').value = createTabListFromWindow(currentWindow, isWithJson);
+      const [text, json] = processTabsInWindows(currentWindow.tabs, exportOptions)
+
+      updateDom(order, text, json, exportOptions)
+
+      // document.getElementById('content').value = createTabListFromWindow(currentWindow, isWithJson);
     });
   }
 
@@ -216,17 +261,11 @@ function createJsonFromWindow(window) {
   }
 
   const json = {}
-  
-  
-
 
   // const [tabList, excludedTabList] = createJson(window.tabs);
   // return generateTabListContent(tabList);
 }
 
-function generateCleanTitle(title, hostname) {
-  return noParenthesis.has(hostname) ? title.replace(/\s*\(.*?\)\s*/g, '') : title;
-}
 
 function getWindows(win) {
   // targetWindow = win;
