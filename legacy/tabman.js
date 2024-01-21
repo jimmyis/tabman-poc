@@ -133,7 +133,16 @@ function processTabsInWindows (tabs, exportOptions) {
   return [text, json]
 }
 
-function start(tab) {
+function getExportOptions() {
+  const isAllWindow = document.getElementById('inclAll').checked;
+  const isWithText = document.getElementById('checkWithText').checked;
+  const isWithJson = document.getElementById('checkWithJson').checked;
+  const isJsonOnly = !isWithText && isWithJson;
+
+  return { isWithText, isWithJson, isJsonOnly, isAllWindow }
+}
+
+async function start() {
   console.log("TabMan Started");
   const isAllWindow = document.getElementById('inclAll').checked;
   const isWithText = document.getElementById('checkWithText').checked;
