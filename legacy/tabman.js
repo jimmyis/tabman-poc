@@ -643,15 +643,17 @@ async function handleCreateYoutubeWatchList() {
 
 document.addEventListener('DOMContentLoaded', async function () {
   document.querySelector('#btOpenTabs').addEventListener('click', openTabs);
-  document.querySelector('#inclTitle').addEventListener('click', start);
-  document.querySelector('#inclAll').addEventListener('click', start);
-  document.querySelector('#checkWithText').addEventListener('click', start);
-  document.querySelector('#checkWithJson').addEventListener('click', start);
+  document.querySelector('#inclTitle').addEventListener('click', async () => await start());
+  document.querySelector('#inclAll').addEventListener('click', async () => await start());
+  document.querySelector('#checkWithText').addEventListener('click', async () => await start());
+  document.querySelector('#checkWithJson').addEventListener('click', async () => await start());
   document.querySelector('#sendMail0').addEventListener('click', function () { sendMail(0) });
   document.querySelector('#sendMail1').addEventListener('click', function () { sendMail(1) });
   document.querySelector('#download').addEventListener('click', download);
   document.querySelector('#btUnknown').addEventListener('click', btUnknown);
   document.querySelector('#btGetAllWindows').addEventListener('click', btGetAllWindows);
   document.querySelector('#btGoToTabGroup').addEventListener('click', function () { goToTabGroup(tabDB.check) });
-  start();
+  document.querySelector('#btCreateYoutubeWatchList').addEventListener('click', async () => await handleCreateYoutubeWatchList());
+
+  await start();
 });
