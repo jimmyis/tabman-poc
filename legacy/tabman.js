@@ -571,7 +571,77 @@ function goToTabGroup(tabId, quietOpen = true) {
   });
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+async function handleCreateYoutubeWatchList() {
+  const exportOptions = getExportOptions();
+  const metaJson = await createMetaJson({ exportOptions });
+  const { windows } = metaJson;
+
+  const watchListWindow = {};
+  const tabIdList = [];
+  const urlList = [];
+
+  for (let windowId in windows) {
+    const window = windows[windowId];
+    
+    for (let tabHashId in window.tabs) {
+      const tab = window.tabs[tabHashId];
+  
+      if (
+        (
+          tab.hostname === "www.youtube.com" 
+          || tab.hostname === "youtube.com"
+          || tab.hostname === "m.youtube.com"
+        )
+        && tab.url !== "https://www.youtube.com/"
+      ) {
+        console.log("handleCreateYoutubeWatchList:Window", tab);
+        watchListWindow[tabHashId] = tab
+        tabIdList.push(tab.tabId)
+        urlList.push(tab.url)
+      }
+    }
+  }
+
+  console.log("Watch List", watchListWindow)
+
+  const isOpenNewWindow = confirm("Do you want to open Youtube in a new window")
+  const isCloseInOthers = confirm("Do you want to close tab in other windows")
+
+  if (isOpenNewWindow) {
+    chrome.windows.create({}, (window) => {
+      console.log("Open in new window");
+
+      const createProperties = {
+        windowId: window.id,
+        active: false,
+      };
+
+      function callback(tab) {
+        // console.log("Openned tabs in a new windows", tab);
+        // chrome.tabs.discard(tab.id);
+      }
+
+      for (let url of urlList) {
+        createProperties.url = url;
+        chrome.tabs.create(createProperties, callback);
+      }
+
+    });
+
+  }
+
+  if (isCloseInOthers) {
+    console.log("Close in other windows");
+
+    function callback(tab) {
+      // console.log("Closed tabs in other windows", tab);
+    }
+
+    chrome.tabs.remove(tabIdList, callback);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async function () {
   document.querySelector('#btOpenTabs').addEventListener('click', openTabs);
   document.querySelector('#inclTitle').addEventListener('click', start);
   document.querySelector('#inclAll').addEventListener('click', start);
