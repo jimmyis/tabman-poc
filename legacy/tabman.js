@@ -40,14 +40,15 @@ const generateCleanTitle = (title, hostname) => noParenthesis.has(hostname) ? ti
 
 const makeTextItem = (title, url) => `${title}\n${url}\n\n`
 
-const makeJsonItem = ({ title, url, windowId, hostname, pathname }) => {
+const makeJsonItem = ({ title, url, windowId, tabId, hostname, pathname }) => {
   const hash = createHash(url)
-  const json = { title, url, windowId, hostname, pathname }
+  const json = { title, url, windowId, tabId, hostname, pathname }
 
   return [hash, json]
 }
 
-function parseTab(tab, { isWithText, isWithJson }) {
+function parseTab(tab, windowId, exportOptions) {
+  const { isWithText, isWithJson } = exportOptions;
   const { 
     origin,
     href,
@@ -85,7 +86,7 @@ function parseTab(tab, { isWithText, isWithJson }) {
     
     if (isWithJson) {
       result["json"] = makeJsonItem({
-        title, url: tab.url, windowId: window.id, hostname, pathname
+        title, url: tab.url, windowId, tabId: tab.id, hostname, pathname
       })
     }
 
@@ -113,13 +114,13 @@ function updateDom(order, text, json, { isWithText, isWithJson }) {
   }
 }
 
-function processTabsInWindows (tabs, exportOptions) {
+function processTabsInWindow (tabs, window, exportOptions) {
   let text = ""
   const json = {};
 
   for (const tab of tabs) {
 
-    const { text: text_, json: json_ } = parseTab(tab, exportOptions)
+    const { text: text_, json: json_ } = parseTab(tab, window.id, exportOptions)
     if (text_) {
       text += text_
     }
@@ -143,6 +144,124 @@ function getExportOptions() {
 }
 
 async function start() {
+  const exportOptions = getExportOptions();
+
+  console.log("TabMan Started");
+  // getTabsLegacy()
+
+  console.log(
+    `Export as ${exportOptions.isWithText && exportOptions.isWithJson ? "Text & Json" 
+      : exportOptions.isWithText ? "Text"
+      : exportOptions.isWithJson ? "Json"
+      : ''}`
+  )
+  document.getElementById('content').value = '';
+
+  chrome.tabGroups.query({
+    // windowId: chrome.windows.WINDOW_ID_CURRENT
+  }, function(tabGroups) {
+    console.log("Total TabGroups", tabGroups.length)
+  })
+
+  try {
+    await createMetaJson({ exportOptions })
+    
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function createMetaJson(options) {
+  const { exportOptions } = options;
+  let order_ = 0;
+  const metaJson = {
+    from: "",
+    profile: "",
+    device: "",
+    timestamp: new Date().getTime(),
+    windows: {},
+  }
+
+  try {
+    
+    if (exportOptions.isAllWindow) {
+
+      const { totalWindows, order, text, windows } = await _getAllTabs(exportOptions, order_);
+      console.log("Total Windows", totalWindows);
+
+      metaJson.windows = windows
+
+      if (exportOptions.isJsonOnly) {
+        document.getElementById('content').value = `\`\`\`\n${ JSON.stringify(metaJson, null, 2)}\n\`\`\`\n`;
+      }
+
+
+    } else {
+      chrome.windows.getCurrent({
+        populate: true
+      }, function (currentWindow) {
+        console.log("Current Window ID", currentWindow.id);
+    
+        tabCount = currentWindow.tabs.length;
+        
+        console.log("Total Tabs in Current Window", tabCount);
+
+        const [text, json] = processTabsInWindow(currentWindow.tabs, currentWindow, exportOptions)
+
+        updateDom(order_, text, json, exportOptions)
+
+        // document.getElementById('content').value = createTabListFromWindow(currentWindow, isWithJson);
+      });
+    }
+
+    // chrome.windows.getCurrent(getWindows);
+  } catch (error) {
+    console.error(error2);
+    
+  } finally {
+    return metaJson
+  }
+}
+
+function _getAllTabs(exportOptions, _order = 0) {
+  return new Promise((resolve, reject) => {
+    const result = {}
+    let order = _order
+
+    chrome.windows.getAll({
+      populate: true
+    }, function (windows) {
+      result.totalWindows = windows.length;
+
+      result.windows = {}
+
+      // const tabsInWindows = windows.map(({ id, tabs }) => ({ id, tabs }));
+      for (let window of windows) {
+        result.windows[window.id] = {
+          order,
+          id: window.id,
+          tabs: {}
+        }
+
+        order += 1;
+
+        const [text, json] = processTabsInWindow(window.tabs, window, exportOptions)
+
+        updateDom(order, text, json, exportOptions)
+        
+        result.windows[window.id].tabs = json;
+        result.text = text
+        result.order = order
+
+      }
+
+      resolve(result)
+
+    });
+  })
+}
+
+function getTabsLegacy() {
   console.log("TabMan Started");
   const isAllWindow = document.getElementById('inclAll').checked;
   const isWithText = document.getElementById('checkWithText').checked;
@@ -190,7 +309,7 @@ async function start() {
 
         order += 1;
 
-        const [text, json] = processTabsInWindows(window.tabs, exportOptions)
+        const [text, json] = processTabsInWindow(window.tabs, window, exportOptions)
         
         metaJson.windows[window.id].tabs = json;
 
@@ -214,7 +333,7 @@ async function start() {
       
       console.log("Total Tabs in Current Window", tabCount);
 
-      const [text, json] = processTabsInWindows(currentWindow.tabs, exportOptions)
+      const [text, json] = processTabsInWindow(currentWindow.tabs, currentWindow, exportOptions)
 
       updateDom(order, text, json, exportOptions)
 
@@ -276,14 +395,14 @@ function createJsonFromWindow(window) {
 }
 
 
-function getWindows(win) {
-  // targetWindow = win;
-  // chrome.tabs.getAllInWindow(targetWindow.id, getTabs);
-}
+// function getWindows(win) {
+//   // targetWindow = win;
+//   // chrome.tabs.getAllInWindow(targetWindow.id, getTabs);
+// }
 
-function getTabs(tabs) {
-  // chrome.windows.getAll({ "populate": true }, expTabs);
-}
+// function getTabs(tabs) {
+//   // chrome.windows.getAll({ "populate": true }, expTabs);
+// }
 
 // This is how tab list will be shown on the UI, Default to text.
 function generateTabListContent(tabList, mode = "text") {
